@@ -1,3 +1,4 @@
+// app/api/report/_lib/db.ts
 import { HttpError } from "./errors";
 import { getServiceSupabase } from "./supabase";
 
@@ -83,6 +84,27 @@ export type AuditLogInsert =
       };
     };
 
+/**
+ * ✅ ADD (PROMPT 7): audit log khusus export (VIEW ONLY) — hard fail jika gagal.
+ * Note: entityTable diset ke "report_export" sesuai requirement prompt 7.2.4.
+ */
+export type ReportExportAuditLogInsert = {
+  companyId: string;
+  // branchId boleh null jika export lintas branch (tetap tenant-safe via filters)
+  branchId: string | null;
+  actorId: string;
+  action: "export";
+  entityTable: "report_export";
+  entityId: string; // bisa pakai "visit-daily" / "daily-leads-summary" / "weekly-leads-summary" atau uuid bila ada
+  metadata: {
+    report_name: "visit-daily" | "daily-leads-summary" | "weekly-leads-summary";
+    start_date: string;
+    end_date: string;
+    unit_kerja_id?: string | null;
+    row_count: number;
+  };
+};
+
 export type VisitDailyRow = {
   companyId: string;
   branch_id: string;
@@ -120,6 +142,30 @@ export type WeeklyLeadsSummaryRow = {
 function branchAllowed(allowed: string[], branchId: string): boolean {
   return allowed.includes(branchId);
 }
+
+/**
+ * ✅ ADD (PROMPT 7): validasi YYYY-MM-DD yang strict + error 422 konsisten
+ */
+function assertIsoDateOnlyOrThrow(s: string, fieldName: string): void {
+  if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    throw new HttpError(422, "BAD_REQUEST", `${fieldName} harus format YYYY-MM-DD`);
+  }
+  const d = new Date(`${s}T00:00:00Z`);
+  if (!Number.isFinite(d.getTime())) {
+    throw new HttpError(422, "BAD_REQUEST", `${fieldName} tidak valid`);
+  }
+}
+
+/**
+ * ✅ ADD (PROMPT 7): type helper untuk range export (daily/weekly)
+ */
+export type ExportRangeArgs = {
+  companyId: string;
+  allowedBranchIds: string[];
+  start_date: string;
+  end_date: string;
+  unit_kerja_id?: string;
+};
 
 /**
  * Resolve work_unit (unit kerja) and ensure:
@@ -236,6 +282,30 @@ export async function writeAuditLog(log: AuditLogInsert): Promise<void> {
   }
 }
 
+/**
+ * ✅ ADD (PROMPT 7): audit log khusus report export.
+ * - entity_table = report_export (hard requirement)
+ * - action = export
+ * - hard fail kalau insert gagal
+ */
+export async function writeReportExportAuditLog(log: ReportExportAuditLogInsert): Promise<void> {
+  const db = getServiceSupabase();
+
+  const { error } = await db.from("audit_logs").insert({
+    companyId: log.companyId,
+    branch_id: log.branchId, // boleh null
+    actor_id: log.actorId,
+    action: log.action, // "export"
+    entity_table: log.entityTable, // "report_export"
+    entity_id: log.entityId,
+    metadata: log.metadata,
+  });
+
+  if (error) {
+    throw new HttpError(500, "INTERNAL_ERROR", "Gagal menulis audit log");
+  }
+}
+
 export async function selectVisitDailyFromView(args: {
   companyId: string;
   allowedBranchIds: string[];
@@ -244,6 +314,10 @@ export async function selectVisitDailyFromView(args: {
   unit_kerja_id?: string;
 }): Promise<VisitDailyRow[]> {
   const db = getServiceSupabase();
+
+  // ✅ ADD: validate date inputs (safe & strict)
+  assertIsoDateOnlyOrThrow(args.start_date, "start_date");
+  assertIsoDateOnlyOrThrow(args.end_date, "end_date");
 
   // READ via VIEW ONLY
   let q = db
@@ -275,6 +349,9 @@ export async function selectVisitMonthlyMatrixFromView(args: {
   unit_kerja_id?: string;
 }): Promise<VisitMonthlyMatrixRow[]> {
   const db = getServiceSupabase();
+
+  // (existing) — Anda bisa tambah validasi tanggal juga jika mau,
+  // tapi PROMPT 7 fokusnya export daily/summary, jadi saya tidak ubah behavior di sini.
 
   // READ via VIEW ONLY
   let q = db
@@ -308,6 +385,10 @@ export async function selectDailyLeadsSummaryFromView(args: {
 }): Promise<DailyLeadsSummaryRow[]> {
   const db = getServiceSupabase();
 
+  // ✅ ADD: validate date inputs (safe & strict)
+  assertIsoDateOnlyOrThrow(args.start_date, "start_date");
+  assertIsoDateOnlyOrThrow(args.end_date, "end_date");
+
   // READ via VIEW ONLY
   let q = db
     .from("vw_daily_leads_summary")
@@ -338,6 +419,10 @@ export async function selectWeeklyLeadsSummaryFromView(args: {
   unit_kerja_id?: string;
 }): Promise<WeeklyLeadsSummaryRow[]> {
   const db = getServiceSupabase();
+
+  // ✅ ADD: validate date inputs (safe & strict)
+  assertIsoDateOnlyOrThrow(args.start_date, "start_date");
+  assertIsoDateOnlyOrThrow(args.end_date, "end_date");
 
   // READ via VIEW ONLY
   let q = db
