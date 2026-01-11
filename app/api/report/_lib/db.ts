@@ -105,6 +105,7 @@ export type ReportExportAuditLogInsert = {
   };
 };
 
+// (legacy types — tetap dibiarkan supaya tidak memutus dependensi internal lain)
 export type VisitDailyRow = {
   companyId: string;
   branch_id: string;
@@ -126,7 +127,6 @@ export type DailyLeadsSummaryRow = {
   branch_id: string;
   unit_kerja_id: string;
   date: string; // YYYY-MM-DD
-  // kolom lainnya dari VIEW boleh ada (total_leads, won, lost, follow_up, dst)
   [k: string]: unknown;
 };
 
@@ -135,7 +135,7 @@ export type WeeklyLeadsSummaryRow = {
   branch_id: string;
   unit_kerja_id: string;
   week_start: string; // YYYY-MM-DD
-  week_end?: string; // optional (tergantung VIEW)
+  week_end?: string;
   [k: string]: unknown;
 };
 
@@ -230,8 +230,7 @@ export async function insertVisitEvent(args: InsertVisitEventArgs): Promise<Inse
     throw new HttpError(500, "INTERNAL_ERROR", "Gagal menyimpan event");
   }
 
-  const inserted = data as unknown as InsertedVisitEvent;
-  return inserted;
+  return data as unknown as InsertedVisitEvent;
 }
 
 export async function insertDailyLead(args: InsertDailyLeadArgs): Promise<InsertedDailyLead> {
@@ -277,7 +276,6 @@ export async function writeAuditLog(log: AuditLogInsert): Promise<void> {
   });
 
   if (error) {
-    // Audit wajib, jadi kalau gagal -> hard fail
     throw new HttpError(500, "INTERNAL_ERROR", "Gagal menulis audit log");
   }
 }
@@ -293,10 +291,10 @@ export async function writeReportExportAuditLog(log: ReportExportAuditLogInsert)
 
   const { error } = await db.from("audit_logs").insert({
     companyId: log.companyId,
-    branch_id: log.branchId, // boleh null
+    branch_id: log.branchId,
     actor_id: log.actorId,
-    action: log.action, // "export"
-    entity_table: log.entityTable, // "report_export"
+    action: log.action,
+    entity_table: log.entityTable,
     entity_id: log.entityId,
     metadata: log.metadata,
   });
@@ -306,39 +304,65 @@ export async function writeReportExportAuditLog(log: ReportExportAuditLogInsert)
   }
 }
 
+// ===== VIEW ROW TYPES (match your view columns) =====
+// Note: bigint / numeric can be returned as string by Supabase; keep union safe.
+export type VisitDailyViewRow = {
+  company_id: string;
+  branch_id: string;
+  date: string; // YYYY-MM-DD
+  unit_kerja_id: string;
+  total_telling: number | string;
+};
+
+export type DailyLeadsSummaryViewRow = {
+  company_id: string;
+  branch_id: string;
+  date: string; // YYYY-MM-DD
+  unit_kerja_id: string;
+  total_leads: number | string;
+  total_won: number | string;
+  total_lost: number | string;
+  total_follow_up: number | string;
+};
+
+export type WeeklyLeadsSummaryViewRow = {
+  company_id: string;
+  branch_id: string;
+  week_start: string; // YYYY-MM-DD
+  unit_kerja_id: string;
+  total_leads: number | string;
+  total_estimated_value: number | string;
+};
+
 export async function selectVisitDailyFromView(args: {
   companyId: string;
   allowedBranchIds: string[];
   start_date: string;
   end_date: string;
   unit_kerja_id?: string;
-}): Promise<VisitDailyRow[]> {
+}): Promise<VisitDailyViewRow[]> {
   const db = getServiceSupabase();
 
-  // ✅ ADD: validate date inputs (safe & strict)
   assertIsoDateOnlyOrThrow(args.start_date, "start_date");
   assertIsoDateOnlyOrThrow(args.end_date, "end_date");
 
-  // READ via VIEW ONLY
   let q = db
     .from("vw_visit_daily_unit")
-    .select("companyId,branch_id,unit_kerja_id,date,metric")
-    .eq("companyId", args.companyId)
+    .select("company_id,branch_id,date,unit_kerja_id,total_telling")
+    .eq("company_id", args.companyId)
     .in("branch_id", args.allowedBranchIds)
     .gte("date", args.start_date)
     .lte("date", args.end_date)
     .order("date", { ascending: true });
 
-  if (args.unit_kerja_id) {
-    q = q.eq("unit_kerja_id", args.unit_kerja_id);
-  }
+  if (args.unit_kerja_id) q = q.eq("unit_kerja_id", args.unit_kerja_id);
 
   const { data, error } = await q;
-  if (error || !data) {
+  if (error) {
     throw new HttpError(500, "INTERNAL_ERROR", "Gagal mengambil report harian");
   }
 
-  return data as unknown as VisitDailyRow[];
+  return (data ?? []) as unknown as VisitDailyViewRow[];
 }
 
 export async function selectVisitMonthlyMatrixFromView(args: {
@@ -350,10 +374,6 @@ export async function selectVisitMonthlyMatrixFromView(args: {
 }): Promise<VisitMonthlyMatrixRow[]> {
   const db = getServiceSupabase();
 
-  // (existing) — Anda bisa tambah validasi tanggal juga jika mau,
-  // tapi PROMPT 7 fokusnya export daily/summary, jadi saya tidak ubah behavior di sini.
-
-  // READ via VIEW ONLY
   let q = db
     .from("vw_visit_monthly_matrix")
     .select("companyId,branch_id,unit_kerja_id,month,metric")
@@ -382,33 +402,29 @@ export async function selectDailyLeadsSummaryFromView(args: {
   start_date: string;
   end_date: string;
   unit_kerja_id?: string;
-}): Promise<DailyLeadsSummaryRow[]> {
+}): Promise<DailyLeadsSummaryViewRow[]> {
   const db = getServiceSupabase();
 
-  // ✅ ADD: validate date inputs (safe & strict)
   assertIsoDateOnlyOrThrow(args.start_date, "start_date");
   assertIsoDateOnlyOrThrow(args.end_date, "end_date");
 
-  // READ via VIEW ONLY
   let q = db
     .from("vw_daily_leads_summary")
-    .select("*")
-    .eq("companyId", args.companyId)
+    .select("company_id,branch_id,date,unit_kerja_id,total_leads,total_won,total_lost,total_follow_up")
+    .eq("company_id", args.companyId)
     .in("branch_id", args.allowedBranchIds)
     .gte("date", args.start_date)
     .lte("date", args.end_date)
     .order("date", { ascending: true });
 
-  if (args.unit_kerja_id) {
-    q = q.eq("unit_kerja_id", args.unit_kerja_id);
-  }
+  if (args.unit_kerja_id) q = q.eq("unit_kerja_id", args.unit_kerja_id);
 
   const { data, error } = await q;
-  if (error || !data) {
+  if (error) {
     throw new HttpError(500, "INTERNAL_ERROR", "Gagal mengambil summary harian");
   }
 
-  return data as unknown as DailyLeadsSummaryRow[];
+  return (data ?? []) as unknown as DailyLeadsSummaryViewRow[];
 }
 
 export async function selectWeeklyLeadsSummaryFromView(args: {
@@ -417,31 +433,27 @@ export async function selectWeeklyLeadsSummaryFromView(args: {
   start_date: string;
   end_date: string;
   unit_kerja_id?: string;
-}): Promise<WeeklyLeadsSummaryRow[]> {
+}): Promise<WeeklyLeadsSummaryViewRow[]> {
   const db = getServiceSupabase();
 
-  // ✅ ADD: validate date inputs (safe & strict)
   assertIsoDateOnlyOrThrow(args.start_date, "start_date");
   assertIsoDateOnlyOrThrow(args.end_date, "end_date");
 
-  // READ via VIEW ONLY
   let q = db
     .from("vw_weekly_leads_summary")
-    .select("*")
-    .eq("companyId", args.companyId)
+    .select("company_id,branch_id,week_start,unit_kerja_id,total_leads,total_estimated_value")
+    .eq("company_id", args.companyId)
     .in("branch_id", args.allowedBranchIds)
     .gte("week_start", args.start_date)
     .lte("week_start", args.end_date)
     .order("week_start", { ascending: true });
 
-  if (args.unit_kerja_id) {
-    q = q.eq("unit_kerja_id", args.unit_kerja_id);
-  }
+  if (args.unit_kerja_id) q = q.eq("unit_kerja_id", args.unit_kerja_id);
 
   const { data, error } = await q;
-  if (error || !data) {
+  if (error) {
     throw new HttpError(500, "INTERNAL_ERROR", "Gagal mengambil summary mingguan");
   }
 
-  return data as unknown as WeeklyLeadsSummaryRow[];
+  return (data ?? []) as unknown as WeeklyLeadsSummaryViewRow[];
 }

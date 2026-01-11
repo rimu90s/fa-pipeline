@@ -5,7 +5,7 @@ import { writeAuditLog } from "@/app/api/report/_lib/audit";
 import { HttpError } from "@/app/api/report/_lib/errors";
 import {
   selectWeeklyLeadsSummaryFromView,
-  type WeeklyLeadsSummaryRow,
+  type WeeklyLeadsSummaryViewRow,
 } from "@/app/api/report/_lib/db";
 
 const EXPORT_ROLES = ["FA", "BRANCH_MANAGER", "COMPANY_ADMIN", "AUDITOR"] as const;
@@ -47,7 +47,7 @@ export async function GET(req: Request) {
       return jsonErr(422, "BAD_REQUEST", "start_date & end_date required");
     }
 
-    const rows: WeeklyLeadsSummaryRow[] = await selectWeeklyLeadsSummaryFromView({
+    const rows: WeeklyLeadsSummaryViewRow[] = await selectWeeklyLeadsSummaryFromView({
       companyId: ctx.companyId,
       allowedBranchIds: ctx.allowedBranchIds,
       start_date,
@@ -71,14 +71,18 @@ export async function GET(req: Request) {
       },
     });
 
-    const cols = ["week_start", "unit_kerja_id"];
+    const cols = ["week_start", "unit_kerja_id", "total_leads", "total_estimated_value"];
     const csv = toCsv(rows as unknown as Array<Record<string, unknown>>, cols);
 
     return new NextResponse(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${fileName("weekly-leads-summary", start_date, end_date)}"`,
+        "Content-Disposition": `attachment; filename="${fileName(
+          "weekly-leads-summary",
+          start_date,
+          end_date
+        )}"`,
       },
     });
   } catch (e: unknown) {

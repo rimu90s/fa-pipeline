@@ -18,38 +18,51 @@ export type WriteAuditLogArgs = {
 /**
  * FINAL AUDIT HELPER (DIKUNCI)
  *
- * - Table: audit_logs
- * - Columns:
- *   company_id
- *   branch_id
- *   actor_user_id
- *   action
- *   entity_table
- *   entity_id
- *   metadata
- *   created_at (DB default)
+ * Table: audit_logs
+ * Columns (from DB):
+ * - company_id (uuid)
+ * - branch_id (uuid)
+ * - actor_user_id (uuid)
+ * - action (USER-DEFINED / enum)
+ * - entity_table (text)
+ * - entity_id (uuid)
+ * - diff_summary (text)
+ * - metadata (jsonb)
+ * - created_at (DB default)
  *
- * - Wajib HARD FAIL jika insert gagal
- * - Dipakai oleh SEMUA module (master, report, export, dll)
+ * RULE:
+ * - HARD FAIL jika insert gagal
  */
 export async function writeAuditLog(args: WriteAuditLogArgs): Promise<void> {
   const db = getServiceSupabase();
 
-  const { error } = await db.from("audit_logs").insert({
+  // Jika kolom entity_id/diff_summary ternyata NOT NULL, kita harus selalu isi.
+  // Untuk export report, entityId boleh null pada caller,
+  // tapi DB tetap perlu uuid valid agar insert tidak gagal.
+  const FALLBACK_ENTITY_ID = "00000000-0000-0000-0000-000000000000";
+
+  const payload = {
     company_id: args.companyId,
     branch_id: args.branchId,
     actor_user_id: args.actorUserId,
+
+    // action adalah enum di DB: pastikan value yang dikirim caller memang valid enum.
+    // Kita tidak memaksa mapping di sini agar tidak mengubah kontrak; kalau invalid, DB akan reject (sesuai hard-fail).
     action: args.action,
+
     entity_table: args.entityTable,
-    entity_id: args.entityId,
+    entity_id: args.entityId ?? FALLBACK_ENTITY_ID,
+
+    // diff_summary ada di schema; isi default agar tidak gagal jika NOT NULL
+    diff_summary: "",
+
     metadata: args.metadata,
-  });
+  };
+
+  const { error } = await db.from("audit_logs").insert(payload);
 
   if (error) {
-    throw new HttpError(
-      500,
-      "INTERNAL_ERROR",
-      "Gagal menulis audit log"
-    );
+    console.error("[audit] insert failed:", error);
+    throw new HttpError(500, "INTERNAL_ERROR", "Gagal menulis audit log");
   }
 }
