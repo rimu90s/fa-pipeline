@@ -3,7 +3,10 @@ import { getReportCtx } from "@/app/api/report/_lib/auth";
 import { requireReportRole } from "@/app/api/report/_lib/rbac";
 import { writeAuditLog } from "@/app/api/report/_lib/audit";
 import { HttpError } from "@/app/api/report/_lib/errors";
-import { selectVisitDailyFromView, type VisitDailyRow } from "@/app/api/report/_lib/db";
+import {
+  selectVisitDailyFromView,
+  type VisitDailyViewRow,
+} from "@/app/api/report/_lib/db";
 
 const EXPORT_ROLES = ["FA", "BRANCH_MANAGER", "COMPANY_ADMIN", "AUDITOR"] as const;
 
@@ -41,10 +44,10 @@ export async function GET(req: Request) {
     const unit_kerja_id = searchParams.get("unit_kerja_id") ?? undefined;
 
     if (!start_date || !end_date) {
-      return jsonErr(422, "BAD_REQUEST", "start_date & end_date required");
+      return jsonErr(422, "INVALID", "start_date & end_date required");
     }
 
-    const rows: VisitDailyRow[] = await selectVisitDailyFromView({
+    const rows: VisitDailyViewRow[] = await selectVisitDailyFromView({
       companyId: ctx.companyId,
       allowedBranchIds: ctx.allowedBranchIds,
       start_date,
@@ -54,9 +57,9 @@ export async function GET(req: Request) {
 
     // AUDIT wajib (hard fail jika gagal)
     await writeAuditLog({
-      action: "REPORT_EXPORT_VISIT_DAILY",
+      action: "REPORT_EXPORT",
       companyId: ctx.companyId,
-      branchId: null,
+      branchId: ctx.allowedBranchIds[0] ?? null,
       actorUserId: ctx.userId,
       entityTable: "report_export",
       entityId: null,
@@ -69,14 +72,19 @@ export async function GET(req: Request) {
       },
     });
 
-    const cols = ["date", "unit_kerja_id", "metric"];
+    // Kolom stabil sesuai view yang kamu kirim
+    const cols = ["date", "unit_kerja_id", "total_telling"];
     const csv = toCsv(rows as unknown as Array<Record<string, unknown>>, cols);
 
     return new NextResponse(csv, {
       status: 200,
       headers: {
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${fileName("visit-daily", start_date, end_date)}"`,
+        "Content-Disposition": `attachment; filename="${fileName(
+          "visit-daily",
+          start_date,
+          end_date
+        )}"`,
       },
     });
   } catch (e: unknown) {
