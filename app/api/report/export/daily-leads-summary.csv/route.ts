@@ -47,6 +47,7 @@ export async function GET(req: Request) {
       return jsonErr(422, "INVALID", "start_date & end_date required");
     }
 
+    // ✅ IMPORTANT: gunakan tipe VIEW, bukan tipe legacy
     const rows: DailyLeadsSummaryViewRow[] = await selectDailyLeadsSummaryFromView({
       companyId: ctx.companyId,
       allowedBranchIds: ctx.allowedBranchIds,
@@ -72,7 +73,6 @@ export async function GET(req: Request) {
       },
     });
 
-    // Kolom stabil sesuai view yang kamu kirim
     const cols = [
       "date",
       "unit_kerja_id",
@@ -96,9 +96,7 @@ export async function GET(req: Request) {
       },
     });
   } catch (e: unknown) {
-    if (e instanceof HttpError) {
-      return jsonErr(e.status, e.code, e.message);
-    }
+    if (e instanceof HttpError) return jsonErr(e.status, e.code, e.message);
     return jsonErr(500, "INTERNAL_ERROR", "Export failed");
   }
 }
