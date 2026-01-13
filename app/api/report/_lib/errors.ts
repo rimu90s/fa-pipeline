@@ -1,12 +1,15 @@
 export class HttpError extends Error {
   public readonly status: number;
-  public readonly code: "BAD_REQUEST" | "UNAUTHORIZED" | "FORBIDDEN" | "NOT_FOUND" | "INTERNAL_ERROR";
+  public readonly code:
+    | "BAD_REQUEST"
+    | "UNAUTHORIZED"
+    | "FORBIDDEN"
+    | "NOT_FOUND"
+    | "INTERNAL_ERROR"
+    | "RATE_LIMIT"
+    | "TIMEOUT";
 
-  constructor(
-    status: number,
-    code: HttpError["code"],
-    message: string
-  ) {
+  constructor(status: number, code: HttpError["code"], message: string) {
     super(message);
     this.status = status;
     this.code = code;

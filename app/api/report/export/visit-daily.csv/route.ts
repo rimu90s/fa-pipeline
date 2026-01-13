@@ -7,6 +7,10 @@ import {
   selectVisitDailyFromView,
   type VisitDailyViewRow,
 } from "@/app/api/report/_lib/db";
+import { enforceRateLimit, pruneRateLimitBuckets } from "@/app/api/report/_lib/rate-limit";
+import { getRequestId } from "@/app/api/report/_lib/request-id";
+import { logJson } from "@/app/api/report/_lib/logger";
+import { createTimeoutController, clearTimeoutTimer, throwIfAborted } from "@/app/api/report/_lib/timeout";
 
 const EXPORT_ROLES = ["FA", "BRANCH_MANAGER", "COMPANY_ADMIN", "AUDITOR"] as const;
 
@@ -27,16 +31,44 @@ function fileName(prefix: string, start: string, end: string) {
   return `${prefix}_${start.replaceAll("-", "")}-${end.replaceAll("-", "")}.csv`;
 }
 
-function jsonErr(status: number, code: string, message: string) {
-  return NextResponse.json({ error: { code, message } }, { status });
+function jsonErr(request_id: string, status: number, code: string, message: string) {
+  return NextResponse.json(
+    { error: { code, message } },
+    { status, headers: { "x-request-id": request_id } }
+  );
 }
 
 export async function GET(req: Request) {
+  const endpoint = "/api/report/export/visit-daily.csv";
+  const request_id = getRequestId(req);
+  const t0 = Date.now();
+
+  const { controller, timer } = createTimeoutController(15_000);
+  const { signal } = controller;
+
+  let userIdForLog = "unknown";
+
   try {
     const ctx = await getReportCtx();
-    if (!ctx?.userId) return jsonErr(401, "UNAUTHORIZED", "Not authenticated");
+    if (!ctx?.userId) return jsonErr(request_id, 401, "UNAUTHORIZED", "Not authenticated");
+    userIdForLog = ctx.userId;
+
+    pruneRateLimitBuckets();
+    enforceRateLimit({
+      key: `${ctx.userId}:${endpoint}`,
+      limit: 5,
+      windowMs: 60_000,
+    });
 
     requireReportRole(ctx, [...EXPORT_ROLES]);
+
+    logJson({
+      level: "info",
+      request_id,
+      user_id: ctx.userId,
+      endpoint,
+      message: "export_start",
+    });
 
     const { searchParams } = new URL(req.url);
     const start_date = searchParams.get("start_date");
@@ -44,8 +76,10 @@ export async function GET(req: Request) {
     const unit_kerja_id = searchParams.get("unit_kerja_id") ?? undefined;
 
     if (!start_date || !end_date) {
-      return jsonErr(422, "INVALID", "start_date & end_date required");
+      return jsonErr(request_id, 422, "INVALID", "start_date & end_date required");
     }
+
+    throwIfAborted(signal);
 
     const rows: VisitDailyViewRow[] = await selectVisitDailyFromView({
       companyId: ctx.companyId,
@@ -55,7 +89,13 @@ export async function GET(req: Request) {
       unit_kerja_id,
     });
 
-    // AUDIT wajib (hard fail jika gagal)
+    throwIfAborted(signal);
+
+    const cols = ["date", "unit_kerja_id", "total_telling"];
+    const csv = toCsv(rows as unknown as Array<Record<string, unknown>>, cols);
+
+    throwIfAborted(signal);
+
     await writeAuditLog({
       action: "REPORT_EXPORT",
       companyId: ctx.companyId,
@@ -64,6 +104,8 @@ export async function GET(req: Request) {
       entityTable: "report_export",
       entityId: null,
       metadata: {
+        request_id,
+        endpoint,
         report_name: "visit-daily",
         start_date,
         end_date,
@@ -72,9 +114,14 @@ export async function GET(req: Request) {
       },
     });
 
-    // Kolom stabil sesuai view yang kamu kirim
-    const cols = ["date", "unit_kerja_id", "total_telling"];
-    const csv = toCsv(rows as unknown as Array<Record<string, unknown>>, cols);
+    logJson({
+      level: "info",
+      request_id,
+      user_id: ctx.userId,
+      endpoint,
+      message: "export_success",
+      duration_ms: Date.now() - t0,
+    });
 
     return new NextResponse(csv, {
       status: 200,
@@ -85,12 +132,24 @@ export async function GET(req: Request) {
           start_date,
           end_date
         )}"`,
+        "x-request-id": request_id,
       },
     });
   } catch (e: unknown) {
-    if (e instanceof HttpError) {
-      return jsonErr(e.status, e.code, e.message);
-    }
-    return jsonErr(500, "INTERNAL_ERROR", "Export failed");
+    const isTimeout = e instanceof HttpError && e.code === "TIMEOUT";
+
+    logJson({
+      level: isTimeout ? "warn" : "error",
+      request_id,
+      user_id: userIdForLog,
+      endpoint,
+      message: isTimeout ? "export_timeout" : "export_error",
+      duration_ms: Date.now() - t0,
+    });
+
+    if (e instanceof HttpError) return jsonErr(request_id, e.status, e.code, e.message);
+    return jsonErr(request_id, 500, "INTERNAL_ERROR", "Export failed");
+  } finally {
+    clearTimeoutTimer(timer);
   }
 }

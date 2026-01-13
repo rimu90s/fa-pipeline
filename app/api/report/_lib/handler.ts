@@ -5,7 +5,9 @@ export type ApiErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "RATE_LIMIT"
+  | "TIMEOUT"
 
 export type ApiErrorBody = {
   error: {

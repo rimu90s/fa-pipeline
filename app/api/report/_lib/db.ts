@@ -55,6 +55,12 @@ export type InsertedDailyLead = {
   estimated_value: number | null;
 };
 
+// ✅ PROMPT 12: correlation id propagation (typing only; DB schema tetap jsonb)
+type AuditMetadataBase = {
+  request_id?: string;
+  endpoint?: string;
+};
+
 export type AuditLogInsert =
   | {
       companyId: string;
@@ -63,11 +69,11 @@ export type AuditLogInsert =
       action: "create";
       entityTable: "visit_events";
       entityId: string;
-      metadata: {
+      metadata: ({
         event_date: string;
         unit_kerja_id: string;
         metric: number;
-      };
+      } & AuditMetadataBase);
     }
   | {
       companyId: string;
@@ -76,12 +82,12 @@ export type AuditLogInsert =
       action: "create";
       entityTable: "daily_leads";
       entityId: string;
-      metadata: {
+      metadata: ({
         lead_date: string;
         unit_kerja_id: string;
         status: "won" | "lost" | "follow_up";
         estimated_value: number | null;
-      };
+      } & AuditMetadataBase);
     };
 
 /**

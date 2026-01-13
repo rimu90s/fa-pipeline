@@ -1,7 +1,7 @@
 import { getReportCtx } from "@/app/api/report/_lib/auth";
 import { requireReportRole } from "@/app/api/report/_lib/rbac";
 import { writeAuditLog } from "@/app/api/report/_lib/audit";
-import { HttpError, toSafeErrorMessage } from "@/app/api/report/_lib/errors";
+import { HttpError } from "@/app/api/report/_lib/errors";
 import {
   selectVisitDailyFromView,
   selectDailyLeadsSummaryFromView,
@@ -11,6 +11,10 @@ import {
   type WeeklyLeadsSummaryViewRow,
 } from "@/app/api/report/_lib/db";
 import { addSheet, appendTotalRow, autoFitColumns, createWorkbook } from "@/app/api/report/_lib/excel";
+import { enforceRateLimit, pruneRateLimitBuckets } from "@/app/api/report/_lib/rate-limit";
+import { getRequestId } from "@/app/api/report/_lib/request-id";
+import { logJson } from "@/app/api/report/_lib/logger";
+import { createTimeoutController, clearTimeoutTimer, throwIfAborted } from "@/app/api/report/_lib/timeout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +22,8 @@ export const dynamic = "force-dynamic";
 const EXPORT_ROLES = ["FA", "BRANCH_MANAGER", "COMPANY_ADMIN", "AUDITOR"] as const;
 const ENTITY_ID_EXPORT_BUNDLE = "00000000-0000-0000-0000-000000000004";
 
-function jsonErr(status: number, code: string, message: string) {
-  return Response.json({ error: { code, message } }, { status });
+function jsonErr(request_id: string, status: number, code: string, message: string) {
+  return Response.json({ error: { code, message } }, { status, headers: { "x-request-id": request_id } });
 }
 
 function yyyymmddToday() {
@@ -49,11 +53,36 @@ function toStrictArrayBuffer(v: unknown): ArrayBuffer {
 }
 
 export async function GET(req: Request) {
+  const endpoint = "/api/report/export/bundle.xlsx";
+  const request_id = getRequestId(req);
+  const t0 = Date.now();
+
+  const { controller, timer } = createTimeoutController(15_000);
+  const { signal } = controller;
+
+  let userIdForLog = "unknown";
+
   try {
     const ctx = await getReportCtx();
-    if (!ctx?.userId) return jsonErr(401, "UNAUTHORIZED", "Not authenticated");
+    if (!ctx?.userId) return jsonErr(request_id, 401, "UNAUTHORIZED", "Not authenticated");
+    userIdForLog = ctx.userId;
+
+    pruneRateLimitBuckets();
+    enforceRateLimit({
+      key: `${ctx.userId}:${endpoint}`,
+      limit: 5,
+      windowMs: 60_000,
+    });
 
     requireReportRole(ctx, [...EXPORT_ROLES]);
+
+    logJson({
+      level: "info",
+      request_id,
+      user_id: ctx.userId,
+      endpoint,
+      message: "export_start",
+    });
 
     const { searchParams } = new URL(req.url);
     const start_date = searchParams.get("start_date");
@@ -61,8 +90,10 @@ export async function GET(req: Request) {
     const unit_kerja_id = searchParams.get("unit_kerja_id") ?? undefined;
 
     if (!start_date || !end_date) {
-      return jsonErr(422, "INVALID", "start_date & end_date required");
+      return jsonErr(request_id, 422, "INVALID", "start_date & end_date required");
     }
+
+    throwIfAborted(signal);
 
     const [visitRows, dailyRows, weeklyRows]: [
       VisitDailyViewRow[],
@@ -92,6 +123,8 @@ export async function GET(req: Request) {
       }),
     ]);
 
+    throwIfAborted(signal);
+
     const wb = createWorkbook();
 
     // 1) Visit Daily
@@ -104,6 +137,7 @@ export async function GET(req: Request) {
       ],
     });
     for (const r of visitRows) {
+      throwIfAborted(signal);
       wsVisit.addRow({
         date: r.date,
         unit_kerja_id: r.unit_kerja_id,
@@ -127,6 +161,7 @@ export async function GET(req: Request) {
       ],
     });
     for (const r of dailyRows) {
+      throwIfAborted(signal);
       wsDaily.addRow({
         date: r.date,
         unit_kerja_id: r.unit_kerja_id,
@@ -151,6 +186,7 @@ export async function GET(req: Request) {
       ],
     });
     for (const r of weeklyRows) {
+      throwIfAborted(signal);
       wsWeekly.addRow({
         week_start: r.week_start,
         unit_kerja_id: r.unit_kerja_id,
@@ -161,7 +197,9 @@ export async function GET(req: Request) {
     appendTotalRow(wsWeekly, { sums: [{ key: "total_leads" }, { key: "total_estimated_value" }] });
     autoFitColumns(wsWeekly);
 
-    // AUDIT SATU KALI (hard-fail)
+    // RULE: timeout → no audit
+    throwIfAborted(signal);
+
     try {
       await writeAuditLog({
         action: "REPORT_EXPORT",
@@ -171,6 +209,8 @@ export async function GET(req: Request) {
         entityTable: "report_export",
         entityId: ENTITY_ID_EXPORT_BUNDLE,
         metadata: {
+          request_id,
+          endpoint,
           report_name: "bundle",
           start_date,
           end_date,
@@ -183,29 +223,48 @@ export async function GET(req: Request) {
         },
       });
     } catch {
-      return jsonErr(500, "AUDIT_FAILED", "Audit log write failed");
+      return jsonErr(request_id, 500, "AUDIT_FAILED", "Audit log write failed");
     }
+
+    throwIfAborted(signal);
 
     const buf = await wb.xlsx.writeBuffer();
     const ab = toStrictArrayBuffer(buf);
 
     const file = `bundle_${yyyymmddToday()}.xlsx`;
+
+    logJson({
+      level: "info",
+      request_id,
+      user_id: ctx.userId,
+      endpoint,
+      message: "export_success",
+      duration_ms: Date.now() - t0,
+    });
+
     return new Response(ab, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         "Content-Disposition": `attachment; filename="${file}"`,
+        "x-request-id": request_id,
       },
     });
   } catch (e: unknown) {
-    if (e instanceof HttpError) return jsonErr(e.status, e.code, e.message);
+    const isTimeout = e instanceof HttpError && e.code === "TIMEOUT";
 
-    console.error("[bundle.xlsx] export failed:", e);
-    const msg =
-      process.env.NODE_ENV !== "production"
-        ? `Export failed: ${toSafeErrorMessage(e)}`
-        : "Export failed";
+    logJson({
+      level: isTimeout ? "warn" : "error",
+      request_id,
+      user_id: userIdForLog,
+      endpoint,
+      message: isTimeout ? "export_timeout" : "export_error",
+      duration_ms: Date.now() - t0,
+    });
 
-    return jsonErr(500, "INTERNAL_ERROR", msg);
+    if (e instanceof HttpError) return jsonErr(request_id, e.status, e.code, e.message);
+    return jsonErr(request_id, 500, "INTERNAL_ERROR", "Export failed");
+  } finally {
+    clearTimeoutTimer(timer);
   }
 }
