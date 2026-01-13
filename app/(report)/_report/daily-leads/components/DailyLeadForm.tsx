@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import MasterSelect from "@/app/components/master/MasterSelect";
-import { dailyLeadSchema } from "../../_lib/schema";
-import { reportPost } from "../../_lib/reportFetch";
+import { dailyLeadSchema } from "../../../_lib/schema";
+import { reportPost } from "../../../_lib/reportFetch";
 
 type Props = {
   onSuccess: () => void;

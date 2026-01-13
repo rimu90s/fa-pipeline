@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getReportUserContext } from "../_lib/reportUserContext";
-import { hasAnyRole, WRITE_ROLES } from "../_lib/rbac";
-import { ReportUserContext } from "../_lib/types";
-import { DailyLeadForm } from "./_components/DailyLeadForm";
-import { DailyLeadsSummaryTable } from "./_components/DailyLeadsSummaryTable";
+import { getReportUserContext } from "../../_lib/reportUserContext";
+import { hasAnyRole, WRITE_ROLES } from "../../_lib/rbac";
+import { ReportUserContext } from "../../_lib/types";
+import { DailyLeadForm } from "../../_report/daily-leads/components/DailyLeadForm";
+import { DailyLeadsSummaryTable } from "../../_report/daily-leads/components/DailyLeadsSummaryTable";
 
 export default function DailyLeadsPage() {
   const [ctx, setCtx] = useState<ReportUserContext | null>(null);

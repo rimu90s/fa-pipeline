@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { reportGet } from "../../_lib/reportFetch";
-import { lastNDays } from "../../_lib/dateRange";
+import { reportGet } from "../../../_lib/reportFetch";
+import { lastNDays } from "../../../_lib/dateRange";
 
 type Row = {
   date: string;

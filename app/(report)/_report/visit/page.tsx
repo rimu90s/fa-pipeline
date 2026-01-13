@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getReportUserContext } from "../_lib/reportUserContext";
-import { hasAnyRole, WRITE_ROLES } from "../_lib/rbac";
-import { ReportUserContext } from "../_lib/types";
-import { VisitEventForm } from "./_components/VisitEventForm";
-import { VisitDailyTable } from "./_components/VisitDailyTable";
+import { getReportUserContext } from "../../_lib/reportUserContext";
+import { hasAnyRole, WRITE_ROLES } from "../../_lib/rbac";
+import { ReportUserContext } from "../../_lib/types";
+import { VisitEventForm } from "./components/VisitEventForm";
+import { VisitDailyTable } from "./components/VisitDailyTable";
 
 export default function VisitPage() {
   const [ctx, setCtx] = useState<ReportUserContext | null>(null);

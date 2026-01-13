@@ -19,7 +19,6 @@ export const metadata: Metadata = {
 
   applicationName: "FA Pipeline",
   manifest: "/manifest.webmanifest",
-  themeColor: "#0b0b0b",
 
   appleWebApp: {
     capable: true,
