@@ -1,33 +1,18 @@
-export default function ExportsPage() {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-2xl font-semibold">Exports</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Download report files (view-only).
-        </p>
-      </div>
+// app/(app)/exports/page.tsx
+import { ExportPage } from "./_components/ExportPage";
+import { getReportUserContext } from "@/app/(app)/_lib/report-user-context";
 
-      <div className="rounded-xl border bg-white p-5 space-y-2">
-        <a className="block text-sm underline" href="/api/report/export/visit-daily.xlsx">
-          Visit Daily (XLSX)
-        </a>
-        <a className="block text-sm underline" href="/api/report/export/visit-daily.csv">
-          Visit Daily (CSV)
-        </a>
-        <a className="block text-sm underline" href="/api/report/export/daily-leads-summary.xlsx">
-          Daily Leads Summary (XLSX)
-        </a>
-        <a className="block text-sm underline" href="/api/report/export/daily-leads-summary.csv">
-          Daily Leads Summary (CSV)
-        </a>
-        <a className="block text-sm underline" href="/api/report/export/weekly-leads-summary.xlsx">
-          Weekly Leads Summary (XLSX)
-        </a>
-        <a className="block text-sm underline" href="/api/report/export/weekly-leads-summary.csv">
-          Weekly Leads Summary (CSV)
-        </a>
-      </div>
-    </div>
-  );
+const EXPORT_ALLOWED_ROLES = new Set([
+  "FA",
+  "BRANCH_MANAGER",
+  "COMPANY_ADMIN",
+  "AUDITOR",
+]);
+
+export default async function ExportsPage() {
+  const ctx = await getReportUserContext();
+  const roles = ctx?.roles ?? [];
+  const canExport = roles.some((r) => EXPORT_ALLOWED_ROLES.has(r));
+
+  return <ExportPage canExport={canExport} roles={roles} />;
 }
