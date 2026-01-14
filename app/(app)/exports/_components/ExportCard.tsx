@@ -7,6 +7,8 @@ import {
   readBackendErrorMessage,
   ExportKind,
 } from "@/app/(app)/_lib/export";
+import { useAutoDismissMessage } from "@/app/(app)/_lib/ui-state";
+import { InlineFeedback } from "@/app/(app)/_components/InlineFeedback";
 import { ExportForm } from "./ExportForm";
 
 type Props =
@@ -28,8 +30,11 @@ export function ExportCard(props: Props) {
   const [loading, setLoading] = React.useState<{ csv?: boolean; xlsx?: boolean }>({});
   const [errorMessage, setErrorMessage] = React.useState<string>("");
 
+  const feedback = useAutoDismissMessage(2500);
+
   async function preflightAndDownload(url: string, format: "csv" | "xlsx") {
     setErrorMessage("");
+    feedback.clear();
     setLoading((s) => ({ ...s, [format]: true }));
 
     try {
@@ -37,17 +42,28 @@ export function ExportCard(props: Props) {
 
       if (!res.ok) {
         const msg = await readBackendErrorMessage(res);
+        // show backend message as-is
         setErrorMessage(msg);
+        feedback.showError(msg);
         return;
       }
 
+      // Non-intrusive success feedback (auto-hide)
+      feedback.showSuccess("Export started. Your download will begin shortly.");
       window.location.href = url;
     } catch {
-      setErrorMessage("Network error");
+      const msg = "Network error";
+      setErrorMessage(msg);
+      feedback.showError(msg);
     } finally {
       setLoading((s) => ({ ...s, [format]: false }));
     }
   }
+
+  const btnBase =
+    "inline-flex h-10 items-center justify-center rounded-md px-3 text-sm " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
+    "disabled:opacity-50 disabled:cursor-not-allowed";
 
   if (props.kind === "bundle") {
     const url = buildExportUrl({ kind: "bundle", format: "xlsx" });
@@ -60,15 +76,23 @@ export function ExportCard(props: Props) {
         </div>
 
         <div className="mt-4 space-y-3">
+          <InlineFeedback kind={feedback.kind} message={feedback.message} />
+
+          {/* Keep backend message as-is; styling only */}
           {errorMessage ? (
-            <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3">
-              <p className="text-sm">{errorMessage}</p>
+            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+              <div className="flex items-start gap-2">
+                <span aria-hidden="true" className="mt-0.5 text-amber-800">
+                  ⚠️
+                </span>
+                <p className="text-sm text-amber-900">{errorMessage}</p>
+              </div>
             </div>
           ) : null}
 
           <button
             type="button"
-            className="inline-flex h-10 items-center justify-center rounded-md bg-black px-3 text-sm text-white disabled:opacity-50"
+            className={`${btnBase} bg-black text-white`}
             disabled={!!loading.xlsx}
             onClick={() => preflightAndDownload(url, "xlsx")}
           >
@@ -99,7 +123,8 @@ export function ExportCard(props: Props) {
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-3">
+        <InlineFeedback kind={feedback.kind} message={feedback.message} />
         <ExportForm onDownload={onDownload} loading={loading} errorMessage={errorMessage} />
       </div>
     </div>

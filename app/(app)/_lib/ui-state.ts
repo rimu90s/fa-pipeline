@@ -1,4 +1,5 @@
 // app/(app)/_lib/ui-state.ts
+import * as React from "react";
 
 export type UiState =
   | { kind: "idle" }
@@ -32,4 +33,33 @@ export function uiEmpty(title?: string, description?: string): UiState {
 
 export function uiError(title?: string, description?: string): UiState {
   return { kind: "error", title, description };
+}
+
+/**
+ * PROMPT 14.5 — inline feedback, non-intrusive, auto-hide 2–3 seconds
+ * UI-only helper. Does not touch backend or RBAC.
+ */
+export function useAutoDismissMessage(timeoutMs = 2500) {
+  const [message, setMessage] = React.useState<string>("");
+  const [kind, setKind] = React.useState<"success" | "error">("success");
+
+  React.useEffect(() => {
+    if (!message) return;
+    const t = setTimeout(() => setMessage(""), timeoutMs);
+    return () => clearTimeout(t);
+  }, [message, timeoutMs]);
+
+  return {
+    message,
+    kind,
+    showSuccess: (msg: string) => {
+      setKind("success");
+      setMessage(msg);
+    },
+    showError: (msg: string) => {
+      setKind("error");
+      setMessage(msg);
+    },
+    clear: () => setMessage(""),
+  };
 }
