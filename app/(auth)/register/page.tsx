@@ -34,8 +34,10 @@ function humanizeAuthError(raw: string) {
   if (msg.includes("already registered")) return "Email sudah terdaftar. Silakan login.";
   if (msg.includes("email") && msg.includes("invalid")) return "Format email tidak valid.";
   if (msg.includes("password")) return "Password tidak memenuhi ketentuan.";
-  if (msg.includes("rate limit") || msg.includes("too many")) return "Terlalu banyak percobaan. Coba lagi beberapa saat.";
-  if (msg.includes("network") || msg.includes("fetch")) return "Koneksi bermasalah. Coba cek internet Anda.";
+  if (msg.includes("rate limit") || msg.includes("too many"))
+    return "Terlalu banyak percobaan. Coba lagi beberapa saat.";
+  if (msg.includes("network") || msg.includes("fetch"))
+    return "Koneksi bermasalah. Coba cek internet Anda.";
   return raw || "Pendaftaran gagal. Coba lagi.";
 }
 
@@ -77,7 +79,11 @@ export default function RegisterPage() {
   const supabase = useMemo(() => getSupabaseBrowser(), []);
 
   const [form, setForm] = useState<FormState>({ email: "", password: "", confirm: "" });
-  const [touched, setTouched] = useState<TouchedState>({ email: false, password: false, confirm: false });
+  const [touched, setTouched] = useState<TouchedState>({
+    email: false,
+    password: false,
+    confirm: false,
+  });
   const [showPass, setShowPass] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [capsOn, setCapsOn] = useState(false);
@@ -94,6 +100,13 @@ export default function RegisterPage() {
     if (!isCoarse) window.setTimeout(() => emailRef.current?.focus(), 120);
   }, []);
 
+  // Auto-clean success after a bit (still redirects)
+  useEffect(() => {
+    if (!success) return;
+    const t = window.setTimeout(() => setSuccess(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [success]);
+
   const eErr = touched.email ? emailError(form.email) : null;
   const pErr = touched.password ? passwordError(form.password) : null;
   const cErr = touched.confirm ? confirmError(form.password, form.confirm) : null;
@@ -102,19 +115,21 @@ export default function RegisterPage() {
   const okPass = !passwordError(form.password);
   const okConfirm = !confirmError(form.password, form.confirm);
 
-  const canSubmit = okEmail && okPass && okConfirm && !loading;
+  const canSubmit = okEmail && okPass && okConfirm && !loading && !success;
 
   const disabledReason = loading
     ? "Sedang memproses…"
-    : !form.email.trim() || !form.password || !form.confirm
-      ? "Lengkapi semua field."
-      : !okEmail
-        ? "Periksa format email."
-        : !okPass
-          ? "Password minimal 8 karakter."
-          : !okConfirm
-            ? "Konfirmasi password harus sama."
-            : null;
+    : success
+      ? "Akun dibuat. Mengarahkan ke login…"
+      : !form.email.trim() || !form.password || !form.confirm
+        ? "Lengkapi semua field."
+        : !okEmail
+          ? "Periksa format email."
+          : !okPass
+            ? "Password minimal 8 karakter."
+            : !okConfirm
+              ? "Konfirmasi password harus sama."
+              : null;
 
   const inputBase =
     "h-11 w-full rounded-xl border bg-white/85 backdrop-blur px-4 text-sm " +
@@ -131,7 +146,7 @@ export default function RegisterPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (loading) return;
+    if (loading || success) return;
 
     setFormError(null);
     setSuccess(null);
@@ -157,7 +172,7 @@ export default function RegisterPage() {
     }
 
     setSuccess("Akun berhasil dibuat. Silakan cek email untuk verifikasi, lalu login.");
-    window.setTimeout(() => router.replace("/login"), 900);
+    window.setTimeout(() => router.replace("/login"), 1400);
   }
 
   return (
@@ -211,11 +226,16 @@ export default function RegisterPage() {
         {/* Left */}
         <div className="hidden md:block animate-[authIn_.55s_ease-out_both]">
           <div className="inline-flex items-center gap-2 rounded-full border border-[color:rgba(17,20,57,0.14)] bg-white/60 px-3 py-1 text-xs font-semibold backdrop-blur">
-            <span className="h-2 w-2 rounded-full" style={{ background: "linear-gradient(135deg, var(--grad-2), var(--grad-3))" }} />
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ background: "linear-gradient(135deg, var(--grad-2), var(--grad-3))" }}
+            />
             FA Pipeline
           </div>
 
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-[color:var(--fg)]">Create account</h1>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-[color:var(--fg)]">
+            Create account
+          </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-[color:rgba(17,20,57,0.66)]">
             Create your account to access{" "}
             <span className="font-semibold text-[color:var(--fg)]">Visits</span>,{" "}
@@ -225,7 +245,14 @@ export default function RegisterPage() {
 
           <div className="mt-8 overflow-hidden rounded-3xl border border-[color:rgba(17,20,57,0.14)] bg-white/60 backdrop-blur">
             <div className="relative px-6 py-6">
-              <div aria-hidden="true" className="absolute inset-x-0 top-0 h-1" style={{ background: "linear-gradient(90deg, var(--grad-2), var(--grad-3), var(--grad-2))" }} />
+              <div
+                aria-hidden="true"
+                className="absolute inset-x-0 top-0 h-1"
+                style={{
+                  background:
+                    "linear-gradient(90deg, var(--grad-2), var(--grad-3), var(--grad-2))",
+                }}
+              />
               <div className="relative">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold text-[color:var(--fg)]">Why sign up</div>
@@ -235,9 +262,15 @@ export default function RegisterPage() {
                 </div>
 
                 <ul className="mt-4 space-y-3 text-sm text-[color:rgba(17,20,57,0.66)]">
-                  <li className="flex items-start gap-3"><IconCheck tone="blue" /> Audit-ready reporting.</li>
-                  <li className="flex items-start gap-3"><IconCheck tone="purple" /> Role-based access control.</li>
-                  <li className="flex items-start gap-3"><IconCheck tone="navy" /> Export CSV / Excel anytime.</li>
+                  <li className="flex items-start gap-3">
+                    <IconCheck tone="blue" /> Audit-ready reporting.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <IconCheck tone="purple" /> Role-based access control.
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <IconCheck tone="navy" /> Export CSV / Excel anytime.
+                  </li>
                 </ul>
               </div>
             </div>
@@ -253,23 +286,45 @@ export default function RegisterPage() {
           <div className="mx-auto w-full max-w-md animate-[authIn_.55s_ease-out_both] [animation-delay:60ms]">
             <div className="relative rounded-3xl p-[1px] bg-[linear-gradient(135deg,rgba(43,89,255,0.38),rgba(139,92,246,0.26),rgba(17,20,57,0.10))] shadow-[0_35px_110px_rgba(17,20,57,0.18)] transition-transform duration-300 will-change-transform hover:-translate-y-1">
               <div className="relative overflow-hidden rounded-3xl bg-white/80 backdrop-blur-md p-7 ring-1 ring-[rgba(17,20,57,0.08)]">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.60) 35%, rgba(255,255,255,0.86) 100%)" }} />
-                <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[520px] -translate-x-1/2 rounded-full opacity-[0.55] blur-2xl" style={{ background: "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0) 70%)" }} />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.60) 35%, rgba(255,255,255,0.86) 100%)",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[520px] -translate-x-1/2 rounded-full opacity-[0.55] blur-2xl"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0) 70%)",
+                  }}
+                />
 
                 <div className="relative">
-                  <h2 className="text-xl font-semibold tracking-tight text-[color:var(--fg)]">Register</h2>
-                  <p className="mt-1 text-sm text-[color:rgba(17,20,57,0.62)]">Create your account to continue.</p>
+                  <h2 className="text-xl font-semibold tracking-tight text-[color:var(--fg)]">
+                    Register
+                  </h2>
+                  <p className="mt-1 text-sm text-[color:rgba(17,20,57,0.62)]">
+                    Create your account to continue.
+                  </p>
 
                   <form onSubmit={onSubmit} className="mt-6 space-y-4" noValidate>
                     {/* Email */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-email">Email</label>
+                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-email">
+                        Email
+                      </label>
                       <input
                         ref={emailRef}
                         id="reg-email"
                         className={cx(
                           inputBase,
-                          eErr ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]" : "border-[color:rgba(17,20,57,0.14)]"
+                          eErr
+                            ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]"
+                            : "border-[color:rgba(17,20,57,0.14)]"
                         )}
                         value={form.email}
                         onChange={(e) => {
@@ -294,14 +349,18 @@ export default function RegisterPage() {
 
                     {/* Password */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-pass">Password</label>
+                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-pass">
+                        Password
+                      </label>
                       <div className="relative">
                         <input
                           id="reg-pass"
                           className={cx(
                             inputBase,
                             "pr-12",
-                            pErr ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]" : "border-[color:rgba(17,20,57,0.14)]"
+                            pErr
+                              ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]"
+                              : "border-[color:rgba(17,20,57,0.14)]"
                           )}
                           type={showPass ? "text" : "password"}
                           value={form.password}
@@ -342,14 +401,18 @@ export default function RegisterPage() {
 
                     {/* Confirm */}
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-confirm">Confirm password</label>
+                      <label className="text-sm font-medium text-[color:var(--fg)]" htmlFor="reg-confirm">
+                        Confirm password
+                      </label>
                       <div className="relative">
                         <input
                           id="reg-confirm"
                           className={cx(
                             inputBase,
                             "pr-12",
-                            cErr ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]" : "border-[color:rgba(17,20,57,0.14)]"
+                            cErr
+                              ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]"
+                              : "border-[color:rgba(17,20,57,0.14)]"
                           )}
                           type={showConfirm ? "text" : "password"}
                           value={form.confirm}
@@ -410,7 +473,14 @@ export default function RegisterPage() {
                           : "bg-[linear-gradient(135deg,rgba(17,20,57,0.35)_0%,rgba(43,89,255,0.22)_55%,rgba(139,92,246,0.18)_100%)] text-white/80"
                       )}
                     >
-                      <span aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-60" style={{ background: "radial-gradient(500px 120px at 50% -10%, rgba(255,255,255,0.45), rgba(255,255,255,0) 70%)" }} />
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 opacity-60"
+                        style={{
+                          background:
+                            "radial-gradient(500px 120px at 50% -10%, rgba(255,255,255,0.45), rgba(255,255,255,0) 70%)",
+                        }}
+                      />
                       {loading ? (
                         <span className="relative inline-flex items-center gap-2">
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white/90" />

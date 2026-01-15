@@ -4,6 +4,10 @@
 import * as React from "react";
 import { validateDateRange } from "@/app/(app)/_lib/export";
 
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(" ");
+}
+
 export function ExportForm(props: {
   onDownload: (args: { start_date: string; end_date: string; format: "csv" | "xlsx" }) => Promise<void>;
   loading?: { csv?: boolean; xlsx?: boolean };
@@ -21,24 +25,25 @@ export function ExportForm(props: {
   const helperId = "export-date-helper";
 
   const inputBase =
-    "h-10 w-full rounded-md border bg-white px-3 text-sm " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2";
+    "h-11 w-full rounded-xl border bg-white/90 px-4 text-sm " +
+    "shadow-[inset_0_1px_0_rgba(17,20,57,0.04)] " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgba(43,89,255,0.28)] focus-visible:ring-offset-2";
 
   const btnBase =
-    "inline-flex h-10 items-center justify-center rounded-md px-3 text-sm " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
-    "disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex h-11 items-center justify-center rounded-xl px-4 text-sm font-semibold " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:rgba(43,89,255,0.30)] focus-visible:ring-offset-2 " +
+    "disabled:opacity-60 disabled:cursor-not-allowed";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <label htmlFor="export-start-date" className="text-sm font-medium">
+        <div className="space-y-2">
+          <label htmlFor="export-start-date" className="text-sm font-medium text-[color:var(--fg)]">
             Start date
           </label>
           <input
             id="export-start-date"
-            className={inputBase}
+            className={cx(inputBase, "border-[color:rgba(17,20,57,0.14)]")}
             type="date"
             value={start_date}
             onChange={(e) => setStart(e.target.value)}
@@ -47,13 +52,13 @@ export function ExportForm(props: {
           />
         </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor="export-end-date" className="text-sm font-medium">
+        <div className="space-y-2">
+          <label htmlFor="export-end-date" className="text-sm font-medium text-[color:var(--fg)]">
             End date
           </label>
           <input
             id="export-end-date"
-            className={inputBase}
+            className={cx(inputBase, "border-[color:rgba(17,20,57,0.14)]")}
             type="date"
             value={end_date}
             onChange={(e) => setEnd(e.target.value)}
@@ -63,19 +68,12 @@ export function ExportForm(props: {
         </div>
       </div>
 
-      {!validation.ok ? (
-        <p id={helperId} className="text-xs text-muted-foreground">
-          {validation.helper}
-        </p>
-      ) : (
-        <p id={helperId} className="text-xs text-muted-foreground">
-          Select a date range to enable download.
-        </p>
-      )}
+      <p id={helperId} className="text-xs text-[color:rgba(17,20,57,0.58)]">
+        {validation.ok ? "Select a date range to enable download." : validation.helper}
+      </p>
 
-      {/* Keep error message as-is (backend truth); styling only */}
       {errorMessage ? (
-        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+        <div className="rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2">
           <div className="flex items-start gap-2">
             <span aria-hidden="true" className="mt-0.5 text-amber-800">
               ⚠️
@@ -88,7 +86,7 @@ export function ExportForm(props: {
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          className={`${btnBase} border bg-white`}
+          className={cx(btnBase, "border border-[color:rgba(17,20,57,0.14)] bg-white/90 hover:bg-white")}
           disabled={disabled || busy}
           onClick={() => onDownload({ start_date, end_date, format: "csv" })}
         >
@@ -97,7 +95,11 @@ export function ExportForm(props: {
 
         <button
           type="button"
-          className={`${btnBase} bg-black text-white`}
+          className={cx(
+            btnBase,
+            "text-white shadow-[0_18px_50px_rgba(43,89,255,0.18)]",
+            "bg-[linear-gradient(135deg,#111439_0%,#2B59FF_55%,#8B5CF6_100%)] hover:brightness-[1.03] active:brightness-[0.98]"
+          )}
           disabled={disabled || busy}
           onClick={() => onDownload({ start_date, end_date, format: "xlsx" })}
         >

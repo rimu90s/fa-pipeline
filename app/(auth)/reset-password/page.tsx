@@ -23,9 +23,12 @@ function confirmError(p: string, c: string) {
 
 function humanize(raw: string) {
   const msg = (raw || "").toLowerCase();
-  if (msg.includes("expired") || msg.includes("invalid")) return "Link reset tidak valid atau sudah kedaluwarsa. Minta link baru.";
-  if (msg.includes("rate limit") || msg.includes("too many")) return "Terlalu banyak percobaan. Coba lagi nanti.";
-  if (msg.includes("network") || msg.includes("fetch")) return "Koneksi bermasalah. Coba cek internet Anda.";
+  if (msg.includes("expired") || msg.includes("invalid"))
+    return "Link reset tidak valid atau sudah kedaluwarsa. Minta link baru.";
+  if (msg.includes("rate limit") || msg.includes("too many"))
+    return "Terlalu banyak percobaan. Coba lagi nanti.";
+  if (msg.includes("network") || msg.includes("fetch"))
+    return "Koneksi bermasalah. Coba cek internet Anda.";
   return raw || "Reset password gagal. Coba lagi.";
 }
 
@@ -56,6 +59,8 @@ export default function ResetPasswordPage() {
   const [capsOn, setCapsOn] = useState(false);
 
   const [booting, setBooting] = useState(true);
+  const [hasSession, setHasSession] = useState<boolean | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -63,7 +68,12 @@ export default function ResetPasswordPage() {
   const pErr = touched.p ? passError(password) : null;
   const cErr = touched.c ? confirmError(password, confirm) : null;
 
-  const canSubmit = !passError(password) && !confirmError(password, confirm) && !loading && !booting;
+  const canSubmit =
+    !passError(password) &&
+    !confirmError(password, confirm) &&
+    !loading &&
+    !booting &&
+    hasSession === true;
 
   useEffect(() => {
     let alive = true;
@@ -71,14 +81,29 @@ export default function ResetPasswordPage() {
     (async () => {
       try {
         const code = sp.get("code");
+
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
         }
+
+        // After exchange attempt, check session existence.
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+
+        if (!alive) return;
+        setHasSession(!!data.session);
+
+        if (!data.session) {
+          setErr("Sesi reset tidak ditemukan. Silakan minta link reset baru.");
+        }
       } catch (e: unknown) {
-        if (alive) setErr(humanize(errMessage(e)));
+        if (!alive) return;
+        setErr(humanize(errMessage(e)));
+        setHasSession(false);
       } finally {
-        if (alive) setBooting(false);
+        if (!alive) return;
+        setBooting(false);
       }
     })();
 
@@ -86,6 +111,13 @@ export default function ResetPasswordPage() {
       alive = false;
     };
   }, [sp, supabase]);
+
+  // auto-hide success (still redirects)
+  useEffect(() => {
+    if (!ok) return;
+    const t = window.setTimeout(() => setOk(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [ok]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,6 +131,12 @@ export default function ResetPasswordPage() {
     const ce = confirmError(password, confirm);
     if (pe || ce) return;
 
+    // If no session, block
+    if (hasSession !== true) {
+      setErr("Sesi reset tidak valid. Silakan minta link reset baru.");
+      return;
+    }
+
     setLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
     setLoading(false);
@@ -109,7 +147,7 @@ export default function ResetPasswordPage() {
     }
 
     setOk("Password berhasil diperbarui. Silakan login kembali.");
-    window.setTimeout(() => router.replace("/login"), 900);
+    window.setTimeout(() => router.replace("/login"), 1400);
   }
 
   const inputBase =
@@ -139,7 +177,13 @@ export default function ResetPasswordPage() {
             filter: "saturate(1.06) contrast(1.03)",
           }}
         />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(248,248,249,0.42) 0%, rgba(248,248,249,0.52) 55%, rgba(248,248,249,0.66) 100%)" }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(248,248,249,0.42) 0%, rgba(248,248,249,0.52) 55%, rgba(248,248,249,0.66) 100%)",
+          }}
+        />
         <div
           className="absolute inset-0"
           style={{
@@ -157,19 +201,30 @@ export default function ResetPasswordPage() {
           }}
         />
         <div className="absolute inset-0 opacity-[0.09] [background-image:linear-gradient(to_right,rgba(17,20,57,0.10)_1px,transparent_1px),linear-gradient(to_bottom,rgba(17,20,57,0.10)_1px,transparent_1px)] [background-size:72px_72px]" />
-        <div className="absolute inset-0" style={{ background: "radial-gradient(1200px 700px at 50% 40%, rgba(255,255,255,0) 0%, rgba(248,248,249,0.22) 55%, rgba(17,20,57,0.14) 100%)" }} />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(1200px 700px at 50% 40%, rgba(255,255,255,0) 0%, rgba(248,248,249,0.22) 55%, rgba(17,20,57,0.14) 100%)",
+          }}
+        />
       </div>
 
       <div className="relative z-10 mx-auto grid min-h-dvh w-full max-w-6xl grid-cols-1 items-center gap-10 px-6 py-10 md:grid-cols-2">
         <div className="hidden md:block animate-[authIn_.55s_ease-out_both]">
           <div className="inline-flex items-center gap-2 rounded-full border border-[color:rgba(17,20,57,0.14)] bg-white/60 px-3 py-1 text-xs font-semibold backdrop-blur">
-            <span className="h-2 w-2 rounded-full" style={{ background: "linear-gradient(135deg, var(--grad-2), var(--grad-3))" }} />
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ background: "linear-gradient(135deg, var(--grad-2), var(--grad-3))" }}
+            />
             FA Pipeline
           </div>
 
-          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-[color:var(--fg)]">Set new password</h1>
+          <h1 className="mt-4 text-4xl font-semibold tracking-tight text-[color:var(--fg)]">
+            Set new password
+          </h1>
           <p className="mt-3 max-w-md text-sm leading-relaxed text-[color:rgba(17,20,57,0.66)]">
-            Buat password baru yang aman. Setelah berhasil, Anda akan diarahkan ke login.
+            Buat password baru yang aman. Halaman ini hanya bisa diakses dari link reset yang valid.
           </p>
         </div>
 
@@ -177,11 +232,27 @@ export default function ResetPasswordPage() {
           <div className="mx-auto w-full max-w-md animate-[authIn_.55s_ease-out_both] [animation-delay:60ms]">
             <div className="relative rounded-3xl p-[1px] bg-[linear-gradient(135deg,rgba(43,89,255,0.38),rgba(139,92,246,0.26),rgba(17,20,57,0.10))] shadow-[0_35px_110px_rgba(17,20,57,0.18)]">
               <div className="relative overflow-hidden rounded-3xl bg-white/80 backdrop-blur-md p-7 ring-1 ring-[rgba(17,20,57,0.08)]">
-                <div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.60) 35%, rgba(255,255,255,0.86) 100%)" }} />
-                <div aria-hidden="true" className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[520px] -translate-x-1/2 rounded-full opacity-[0.55] blur-2xl" style={{ background: "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0) 70%)" }} />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.78) 0%, rgba(255,255,255,0.60) 35%, rgba(255,255,255,0.86) 100%)",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute -top-24 left-1/2 h-56 w-[520px] -translate-x-1/2 rounded-full opacity-[0.55] blur-2xl"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0) 70%)",
+                  }}
+                />
 
                 <div className="relative">
-                  <h2 className="text-xl font-semibold tracking-tight text-[color:var(--fg)]">Reset password</h2>
+                  <h2 className="text-xl font-semibold tracking-tight text-[color:var(--fg)]">
+                    Reset password
+                  </h2>
                   <p className="mt-1 text-sm text-[color:rgba(17,20,57,0.62)]">
                     Choose a new password to secure your account.
                   </p>
@@ -203,7 +274,9 @@ export default function ResetPasswordPage() {
                           className={cx(
                             inputBase,
                             "pr-12",
-                            pErr ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]" : "border-[color:rgba(17,20,57,0.14)]"
+                            pErr
+                              ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]"
+                              : "border-[color:rgba(17,20,57,0.14)]"
                           )}
                           type={showP ? "text" : "password"}
                           value={password}
@@ -218,11 +291,13 @@ export default function ResetPasswordPage() {
                           placeholder="Minimal 8 karakter"
                           aria-invalid={!!pErr}
                           aria-describedby="rp-pass-help"
+                          disabled={hasSession === false}
                         />
                         <button
                           type="button"
                           onClick={() => setShowP((v) => !v)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-[color:rgba(17,20,57,0.65)] hover:bg-[rgba(17,20,57,0.06)]"
+                          disabled={hasSession === false}
                         >
                           {showP ? "Hide" : "Show"}
                         </button>
@@ -252,7 +327,9 @@ export default function ResetPasswordPage() {
                           className={cx(
                             inputBase,
                             "pr-12",
-                            cErr ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]" : "border-[color:rgba(17,20,57,0.14)]"
+                            cErr
+                              ? "border-red-300 focus-visible:ring-[rgba(239,68,68,0.28)]"
+                              : "border-[color:rgba(17,20,57,0.14)]"
                           )}
                           type={showC ? "text" : "password"}
                           value={confirm}
@@ -266,11 +343,13 @@ export default function ResetPasswordPage() {
                           placeholder="Ulangi password"
                           aria-invalid={!!cErr}
                           aria-describedby="rp-confirm-help"
+                          disabled={hasSession === false}
                         />
                         <button
                           type="button"
                           onClick={() => setShowC((v) => !v)}
                           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-semibold text-[color:rgba(17,20,57,0.65)] hover:bg-[rgba(17,20,57,0.06)]"
+                          disabled={hasSession === false}
                         >
                           {showC ? "Hide" : "Show"}
                         </button>
@@ -291,9 +370,9 @@ export default function ResetPasswordPage() {
                           <p className="text-sm text-amber-900">{err}</p>
                         </div>
                         <div className="mt-2 text-xs text-amber-900/80">
-                          Jika link sudah kedaluwarsa, minta{" "}
+                          Minta{" "}
                           <Link href="/forgot-password" className="underline underline-offset-4">
-                            link baru
+                            link reset baru
                           </Link>
                           .
                         </div>
@@ -320,7 +399,14 @@ export default function ResetPasswordPage() {
                           : "bg-[linear-gradient(135deg,rgba(17,20,57,0.35)_0%,rgba(43,89,255,0.22)_55%,rgba(139,92,246,0.18)_100%)] text-white/80"
                       )}
                     >
-                      <span aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-60" style={{ background: "radial-gradient(500px 120px at 50% -10%, rgba(255,255,255,0.45), rgba(255,255,255,0) 70%)" }} />
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 opacity-60"
+                        style={{
+                          background:
+                            "radial-gradient(500px 120px at 50% -10%, rgba(255,255,255,0.45), rgba(255,255,255,0) 70%)",
+                        }}
+                      />
                       {loading ? (
                         <span className="relative inline-flex items-center gap-2">
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white/90" />
