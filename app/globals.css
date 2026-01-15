@@ -1,42 +1,58 @@
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --bg: #f8f8f9;         /* White lilac */
+  --fg: #111439;         /* Navy */
+  --card: #ffffff;
+
+  --muted: rgba(17, 20, 57, 0.62);
+  --border: rgba(17, 20, 57, 0.12);
+
+  --grad-1: #111439; /* navy */
+  --grad-2: #2b59ff; /* blue */
+  --grad-3: #8b5cf6; /* soft purple */
 }
 
 html,
 body {
-  max-width: 100vw;
-  overflow-x: hidden;
+  height: 100%;
 }
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-  padding: 0;
-  margin: 0;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
+/* ---------- Light, GPU-friendly animations (auth) ---------- */
+@keyframes authIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-\[authIn_\.55s_ease-out_both\] {
+    animation: none !important;
+  }
+}
+
+/* Optional: smoother focus appearance without changing Tailwind defaults */
+:focus-visible {
+  outline: none;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(120%); }
+}
+

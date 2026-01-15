@@ -1,43 +1,33 @@
 // app/(app)/_lib/me.ts
-export type UserRole = "FA" | "VIEWER" | "AUDITOR" | "BRANCH_MANAGER" | "COMPANY_ADMIN";
+export type UserRole =
+  | "FA"
+  | "VIEWER"
+  | "AUDITOR"
+  | "BRANCH_MANAGER"
+  | "COMPANY_ADMIN";
 
-type ReportUserContextData = {
+export type ReportUserContextData = {
   userId: string;
   roles: UserRole[];
 };
 
-type ReportUserContextOk = {
-  data: ReportUserContextData;
-};
-
-type ReportUserContextErr = {
-  error?: { code?: string; message?: string };
-};
-
-function isOkShape(v: unknown): v is ReportUserContextOk {
+function isOkShape(v: unknown): v is { userId: string; roles: unknown[] } {
   if (!v || typeof v !== "object") return false;
   const obj = v as Record<string, unknown>;
-  if (!("data" in obj)) return false;
-
-  const data = obj["data"];
-  if (!data || typeof data !== "object") return false;
-
-  const d = data as Record<string, unknown>;
-  return typeof d["userId"] === "string" && Array.isArray(d["roles"]);
+  return typeof obj.userId === "string" && Array.isArray(obj.roles);
 }
 
+/**
+ * Client-side context fetch for Dashboard / AppShell.
+ * IMPORTANT: must match server endpoint output: { userId, roles }.
+ */
 export async function getReportUserContext(): Promise<ReportUserContextData> {
-  const res = await fetch("/api/report/_debug/context", {
+  // Use non-underscore route that we know resolves in this project
+  const res = await fetch("/api/report/debug/context", {
     method: "GET",
     cache: "no-store",
+    // cookies will be sent for same-origin fetch by default
   });
-
-  // IMPORTANT:
-  // - Jangan throw untuk 401/403 (user belum login / tidak punya akses) agar UI tidak crash.
-  // - Caller (Sidebar/RoleGate) bisa fallback dengan roles [].
-  if (res.status === 401 || res.status === 403) {
-    return { userId: "", roles: [] };
-  }
 
   const text = await res.text();
   let json: unknown = null;
@@ -45,21 +35,19 @@ export async function getReportUserContext(): Promise<ReportUserContextData> {
   try {
     json = text ? (JSON.parse(text) as unknown) : null;
   } catch {
-    // non-JSON response
+    // ignore non-JSON
   }
 
+  // For safety: never crash UI with opaque error
   if (!res.ok) {
-    // Jika backend kirim message, tampilkan untuk debugging, tapi tetap error yang jelas.
-    const msg =
-      json && typeof json === "object"
-        ? ((json as ReportUserContextErr).error?.message ?? `HTTP ${res.status}`)
-        : `HTTP ${res.status}`;
-    throw new Error(`Failed to load report context: ${msg}`);
+    // Treat as unauthenticated (or temporarily unavailable)
+    return { userId: "", roles: [] };
   }
 
   if (!isOkShape(json)) {
-    throw new Error("Missing report context endpoint. Provide GET /api/report/_debug/context returning roles[]");
+    // Treat as unauthenticated rather than throwing (prevents login loop)
+    return { userId: "", roles: [] };
   }
 
-  return { userId: json.data.userId, roles: json.data.roles };
+  return { userId: json.userId, roles: json.roles as UserRole[] };
 }

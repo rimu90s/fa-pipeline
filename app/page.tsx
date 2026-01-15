@@ -1,6 +1,36 @@
 // app/page.tsx
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+import DashboardPage from "@/app/(app)/page";
 
-export default function Home() {
-  redirect("/login");
+export default async function Home() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) redirect("/login");
+
+  const cookieStore = await cookies();
+
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name, value, options) {
+        cookieStore.set({ name, value, ...options });
+      },
+      remove(name, options) {
+        cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+      },
+    },
+  });
+
+  // session-based gate (source of truth)
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) {
+    redirect("/login");
+  }
+
+  // Auth OK => render dashboard
+  return <DashboardPage />;
 }

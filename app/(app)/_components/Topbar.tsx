@@ -32,7 +32,14 @@ export default function Topbar({
   const router = useRouter();
 
   async function onLogout() {
-    router.replace("/login");
+    try {
+      // IMPORTANT: real sign-out (remove Supabase cookies)
+      await fetch("/api/auth/sign-out", { method: "POST" });
+    } catch {
+      // ignore network error
+    } finally {
+      router.replace("/login");
+    }
   }
 
   const btnBase =
@@ -42,9 +49,8 @@ export default function Topbar({
   return (
     <header className="sticky top-0 z-10 border-b bg-white/80 backdrop-blur">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-3">
-        {/* Left: mobile toggle + title + breadcrumb */}
+        {/* Left */}
         <div className="flex items-center gap-3">
-          {/* Mobile sidebar toggle */}
           <button
             type="button"
             className={cx(
@@ -59,7 +65,6 @@ export default function Topbar({
               else onOpenMobileNav?.();
             }}
           >
-            {/* Simple hamburger icon */}
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M4 7h16M4 12h16M4 17h16"
@@ -78,7 +83,7 @@ export default function Topbar({
           </div>
         </div>
 
-        {/* Right: actions */}
+        {/* Right */}
         <div className="flex items-center gap-2">
           <Link href="/settings" className={btnBase}>
             Settings

@@ -1,5 +1,9 @@
 // app/(app)/daily-leads/page.tsx
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { createServerClient } from "@supabase/ssr";
+
 import DailyLeadsPage from "@/app/(report)/_report/daily-leads/page";
 import { SkeletonTable } from "@/app/(app)/_components/Skeleton";
 
@@ -15,7 +19,33 @@ function DailyLeadsSkeleton() {
   );
 }
 
-export default function AppDailyLeadsPage() {
+async function requireSessionOrRedirect() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anon) redirect("/login");
+
+  const cookieStore = await cookies();
+  const supabase = createServerClient(url, anon, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name, value, options) {
+        cookieStore.set({ name, value, ...options });
+      },
+      remove(name, options) {
+        cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+      },
+    },
+  });
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) redirect("/login");
+}
+
+export default async function AppDailyLeadsPage() {
+  await requireSessionOrRedirect();
+
   return (
     <Suspense fallback={<DailyLeadsSkeleton />}>
       <DailyLeadsPage />

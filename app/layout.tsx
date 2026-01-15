@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist as GeistSans, Geist_Mono as GeistMono } from "next/font/google";
-import "./globals.css";
+import "./globals.css"; // ✅ BENAR
 import { PwaRegister } from "@/app/_components/PwaRegister";
 
 const geistSans = GeistSans({
@@ -16,17 +16,6 @@ const geistMono = GeistMono({
 export const metadata: Metadata = {
   title: "FA Pipeline",
   description: "FA reporting pipeline (Visit, Leads, Export)",
-
-  applicationName: "FA Pipeline",
-  manifest: "/manifest.webmanifest",
-
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "FA Pipeline",
-  },
-
-  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
@@ -35,15 +24,13 @@ export const viewport: Viewport = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
-  const isProd = process.env.NODE_ENV === "production";
-
+}) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {isProd ? <PwaRegister /> : null}
+        <PwaRegister />
         {children}
       </body>
     </html>

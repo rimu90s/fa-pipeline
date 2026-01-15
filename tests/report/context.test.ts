@@ -8,7 +8,7 @@ vi.mock("@/app/api/report/_lib/auth", () => {
   };
 });
 
-import { GET } from "@/app/api/report/_debug/context/route";
+import { GET } from "@/app/api/report/debug/context/route";
 
 describe("PROMPT 9 — context endpoint", () => {
   it("returns only userId and roles (no tenant scope leak)", async () => {
