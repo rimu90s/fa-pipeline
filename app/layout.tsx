@@ -38,10 +38,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isProd = process.env.NODE_ENV === "production";
+
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <PwaRegister />
+        {isProd ? <PwaRegister /> : null}
         {children}
       </body>
     </html>
