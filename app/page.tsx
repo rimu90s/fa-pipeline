@@ -2,7 +2,9 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
-import DashboardPage from "@/app/(app)/page";
+
+import AppShell from "@/app/(app)/_components/AppShell";
+import DashboardClient from "@/app/(app)/page";
 
 export default async function Home() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -25,12 +27,13 @@ export default async function Home() {
     },
   });
 
-  // session-based gate (source of truth)
   const { data, error } = await supabase.auth.getUser();
-  if (error || !data?.user) {
-    redirect("/login");
-  }
+  if (error || !data?.user) redirect("/login");
 
-  // Auth OK => render dashboard
-  return <DashboardPage />;
+  // IMPORTANT: render WITH AppShell so Sidebar/Topbar appear
+  return (
+    <AppShell>
+      <DashboardClient />
+    </AppShell>
+  );
 }

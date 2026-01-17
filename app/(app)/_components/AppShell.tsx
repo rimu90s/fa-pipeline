@@ -1,38 +1,68 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
-function cx(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(" ");
+type Props = {
+  children: React.ReactNode;
+};
+
+const LS_KEY = "fa.sidebar.collapsed.v1";
+const EVT = "fa:sidebar:toggle";
+
+function readCollapsedSafe() {
+  try {
+    return window.localStorage.getItem(LS_KEY) === "1";
+  } catch {
+    return false;
+  }
 }
 
-export default function AppShell({ children }: { children: ReactNode }) {
+export default function AppShell({ children }: Props) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  function openSidebar() {
-    setMobileOpen(true);
-  }
+  // single source of truth (hydrated from storage)
+  const [collapsed, setCollapsed] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  function closeSidebar() {
-    setMobileOpen(false);
-  }
-
-  // ESC to close
   useEffect(() => {
-    if (!mobileOpen) return;
+    let alive = true;
 
+    const defer =
+      typeof queueMicrotask === "function"
+        ? queueMicrotask
+        : (cb: () => void) => Promise.resolve().then(cb);
+
+    const syncFromStorage = () => {
+      defer(() => {
+        if (!alive) return;
+        setCollapsed(readCollapsedSafe());
+        setHydrated(true);
+      });
+    };
+
+    // hydrate after mount (avoid hydration mismatch)
+    syncFromStorage();
+
+    window.addEventListener(EVT, syncFromStorage);
+    window.addEventListener("storage", syncFromStorage);
+
+    return () => {
+      alive = false;
+      window.removeEventListener(EVT, syncFromStorage);
+      window.removeEventListener("storage", syncFromStorage);
+    };
+  }, []);
+
+  useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") closeSidebar();
+      if (e.key === "Escape") setMobileOpen(false);
     }
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mobileOpen]);
+  }, []);
 
-  // prevent background scroll when drawer open
   useEffect(() => {
     if (!mobileOpen) return;
     const prev = document.body.style.overflow;
@@ -42,48 +72,130 @@ export default function AppShell({ children }: { children: ReactNode }) {
     };
   }, [mobileOpen]);
 
+  // IMPORTANT: keep SSR deterministic (expanded first paint)
+  const collapsedView = hydrated ? collapsed : false;
+
+  // geometry
+  const sidebarW = collapsedView ? 92 : 288;
+
+  // premium easing
+  const easing = "cubic-bezier(0.22, 1, 0.36, 1)";
+  const dur = "520ms";
+
+  // premium canvas: clean, futuristic, subtle depth (no noisy dirt)
+  const canvas = useMemo(() => {
+    const base = "rgba(247,248,252,1)";
+
+    // subtle micro-grid (very low contrast) — gives depth without “kotor”
+    const microGrid =
+      "linear-gradient(to right, rgba(17,20,57,0.028) 1px, rgba(255,255,255,0) 1px), " +
+      "linear-gradient(to bottom, rgba(17,20,57,0.028) 1px, rgba(255,255,255,0) 1px)";
+
+    // soft wash + controlled glows
+    const glows = [
+      "radial-gradient(1200px 680px at 16% 6%, rgba(59,130,246,0.14), rgba(255,255,255,0) 62%)",
+      "radial-gradient(1100px 680px at 84% 8%, rgba(99,102,241,0.12), rgba(255,255,255,0) 62%)",
+      "radial-gradient(900px 520px at 52% 112%, rgba(17,20,57,0.07), rgba(255,255,255,0) 64%)",
+    ].join(",");
+
+    // top specular highlight (kaca terasa “mahal”)
+    const topHighlight =
+      "linear-gradient(180deg, rgba(255,255,255,0.75), rgba(255,255,255,0.28), rgba(255,255,255,0.00))";
+
+    // gentle vignette to frame the content
+    const vignette = "radial-gradient(1400px 900px at 50% 40%, rgba(0,0,0,0), rgba(17,20,57,0.06) 72%)";
+
+    return { base, microGrid, glows, topHighlight, vignette };
+  }, []);
+
   return (
-    <div className="relative min-h-dvh bg-[color:var(--bg)]">
-      {/* App backdrop (subtle, premium) */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+    <div className="min-h-dvh">
+      {/* PREMIUM CLEAN CANVAS */}
+      <div className="fixed inset-0 -z-10">
+        {/* Base */}
+        <div className="absolute inset-0" style={{ background: canvas.base }} />
+
+        {/* Micro grid — super subtle */}
         <div
-          className="absolute inset-0"
+          className="absolute inset-0 opacity-[0.18]"
           style={{
-            background:
-              "radial-gradient(900px 520px at 12% 12%, rgba(43,89,255,0.10) 0%, rgba(43,89,255,0) 60%)," +
-              "radial-gradient(900px 520px at 88% 18%, rgba(139,92,246,0.10) 0%, rgba(139,92,246,0) 62%)," +
-              "radial-gradient(900px 560px at 50% 100%, rgba(17,20,57,0.08) 0%, rgba(17,20,57,0) 62%)",
+            backgroundImage: canvas.microGrid,
+            backgroundSize: "72px 72px",
           }}
         />
+
+        {/* Soft wash & glows */}
+        <div className="absolute inset-0" style={{ background: canvas.glows }} />
+
+        {/* Specular highlight */}
         <div
-          className="absolute inset-0 opacity-[0.06] mix-blend-soft-light"
-          style={{
-            backgroundImage:
-              "url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22120%22 height=%22120%22%3E%3Cfilter id=%22n%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.8%22 numOctaves=%222%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22120%22 height=%22120%22 filter=%22url(%23n)%22 opacity=%220.35%22/%3E%3C/svg%3E')",
-          }}
+          className="absolute inset-x-0 top-0 h-[420px] opacity-60"
+          style={{ background: canvas.topHighlight }}
         />
+
+        {/* Vignette */}
+        <div className="absolute inset-0" style={{ background: canvas.vignette }} />
       </div>
 
-      <div className="flex">
-        {/* Desktop sidebar */}
-        <Sidebar variant="desktop" />
+      <div className="flex min-h-dvh">
+        {/* Desktop sidebar (fixed) */}
+        <div
+          className="hidden md:block md:fixed md:inset-y-0 md:left-0"
+          style={{
+            width: sidebarW,
+            transition: `width ${dur} ${easing}`,
+            willChange: "width",
+          }}
+        >
+          <div
+            className="h-full border-r border-[rgba(17,20,57,0.10)] bg-white/70 backdrop-blur-xl"
+            style={{
+              boxShadow: "0 24px 90px rgba(17,20,57,0.10)",
+            }}
+          >
+            {/* inner width keeps feel “solid” */}
+            <div
+              className="h-full"
+              style={{
+                width: sidebarW,
+                transition: `width ${dur} ${easing}`,
+                willChange: "width",
+              }}
+            >
+              <Sidebar variant="desktop" collapsed={collapsedView} />
+            </div>
+          </div>
+        </div>
 
-        <div className="flex min-h-dvh flex-1 flex-col">
+        {/* Main column */}
+        <div
+          className="flex min-h-dvh w-full flex-col"
+          style={{
+            paddingLeft: sidebarW,
+            transition: `padding-left ${dur} ${easing}`,
+            willChange: "padding-left",
+          }}
+        >
           <Topbar
             mobileNavOpen={mobileOpen}
-            onOpenMobileNav={openSidebar}
-            onCloseMobileNav={closeSidebar}
+            onOpenMobileNav={() => setMobileOpen(true)}
+            onCloseMobileNav={() => setMobileOpen(false)}
+            sidebarCollapsed={collapsedView}
           />
 
-          <main className="flex-1">
-            {/* content container */}
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6 md:py-8">
-              {/* Optional: make content sit on a subtle card for “ realize “enterprise app” vibe
-                  If you feel too “boxed”, you can remove this wrapper.
-              */}
-              <div className="rounded-2xl border border-[rgba(17,20,57,0.10)] bg-white/70 backdrop-blur p-4 shadow-[0_18px_70px_rgba(17,20,57,0.06)] md:p-6">
-                {children}
-              </div>
+          <main className="mx-auto w-full max-w-6xl px-4 py-6 md:px-6">
+            {/* content glass frame (very subtle) */}
+            <div className="relative">
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute -inset-2 -z-10 rounded-[28px] opacity-60"
+                style={{
+                  background:
+                    "radial-gradient(900px 320px at 20% 0%, rgba(99,102,241,0.10), rgba(255,255,255,0) 62%)",
+                  filter: "blur(10px)",
+                }}
+              />
+              {children}
             </div>
           </main>
         </div>
@@ -91,22 +203,21 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 md:hidden">
-          {/* Overlay */}
+        <div className="fixed inset-0 z-40 md:hidden">
           <button
             type="button"
             aria-label="Close navigation"
-            onClick={closeSidebar}
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/25 backdrop-blur-[2px]"
+            onClick={() => setMobileOpen(false)}
           />
-          {/* Drawer panel */}
-          <div
-            className={cx(
-              "absolute inset-y-0 left-0 w-80 max-w-[88vw]",
-              "shadow-[0_30px_120px_rgba(17,20,57,0.35)]"
-            )}
-          >
-            <Sidebar variant="mobile" onNavigate={closeSidebar} />
+
+          <div className="absolute left-0 top-0 h-full w-[86%] max-w-[320px]">
+            <div
+              className="h-full border-r border-[rgba(17,20,57,0.10)] bg-white/80 backdrop-blur-xl"
+              style={{ boxShadow: "0 28px 110px rgba(17,20,57,0.16)" }}
+            >
+              <Sidebar variant="mobile" collapsed={false} onNavigate={() => setMobileOpen(false)} />
+            </div>
           </div>
         </div>
       ) : null}

@@ -2,17 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =========================================================
+   Futuristic clean tokens (glass-first, zero-mud)
+   ========================================================= */
 :root {
-  --bg: #f8f8f9;         /* White lilac */
-  --fg: #111439;         /* Navy */
-  --card: #ffffff;
+  --bg: #f6f7fb;
+  --fg: rgba(17, 20, 57, 0.92);
 
   --muted: rgba(17, 20, 57, 0.62);
-  --border: rgba(17, 20, 57, 0.12);
+  --muted-strong: rgba(17, 20, 57, 0.78);
 
-  --grad-1: #111439; /* navy */
-  --grad-2: #2b59ff; /* blue */
-  --grad-3: #8b5cf6; /* soft purple */
+  --line: rgba(17, 20, 57, 0.10);
+  --line-strong: rgba(17, 20, 57, 0.14);
+
+  /* Frosted glass base */
+  --glass: rgba(255, 255, 255, 0.52);
+  --glass-strong: rgba(255, 255, 255, 0.64);
+
+  /* Shadows (clean) */
+  --shadow-sm: 0 10px 26px rgba(17, 20, 57, 0.08);
+  --shadow-md: 0 18px 52px rgba(17, 20, 57, 0.10);
+  --shadow-lg: 0 28px 86px rgba(17, 20, 57, 0.14);
+
+  /* Accent (very subtle) */
+  --accent: rgba(79, 70, 229, 0.22);  /* indigo */
+  --accent2: rgba(59, 130, 246, 0.16); /* blue */
 }
 
 html,
@@ -27,32 +41,170 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ---------- Light, GPU-friendly animations (auth) ---------- */
-@keyframes authIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px) scale(0.99);
+/* =========================================================
+   Glass system
+   - No noise
+   - No tint wash
+   - Glow lives in AppShell canvas, not in cards
+   ========================================================= */
+@layer utilities {
+  .text-muted {
+    color: var(--muted);
   }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
+  .text-muted-strong {
+    color: var(--muted-strong);
+  }
+
+  /* Elegant focus ring */
+  .focus-ring {
+    outline: none;
+  }
+  .focus-ring:focus-visible {
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.9),
+      0 0 0 4px rgba(59, 130, 246, 0.22);
+  }
+
+  /* -------------------------------------------------------
+     Panels
+     ------------------------------------------------------- */
+  .glass-panel {
+    @apply rounded-2xl p-5;
+    background: var(--glass-strong);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: var(--shadow-md);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .glass-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    /* specular sheen only */
+    background:
+      radial-gradient(1100px 260px at 18% 0%, rgba(255,255,255,0.60), rgba(255,255,255,0) 60%),
+      radial-gradient(900px 220px at 82% 0%, rgba(255,255,255,0.42), rgba(255,255,255,0) 62%),
+      linear-gradient(180deg, rgba(255,255,255,0.16), rgba(255,255,255,0));
+
+    opacity: 0.85;
+  }
+
+  /* Hairline inner edge (makes it look like real glass) */
+  .glass-panel::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.55) inset,
+      0 0 0 1px rgba(17,20,57,0.02);
+    opacity: 0.9;
+  }
+
+  /* -------------------------------------------------------
+     Cards
+     ------------------------------------------------------- */
+  .glass-card {
+    @apply rounded-2xl;
+    background: var(--glass);
+    border: 1px solid var(--line);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .glass-card::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    /* calmer sheen */
+    background:
+      radial-gradient(900px 220px at 18% 0%, rgba(255,255,255,0.56), rgba(255,255,255,0) 58%),
+      linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0));
+
+    opacity: 0.78;
+  }
+
+  .glass-card::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.52) inset;
+    opacity: 0.9;
+  }
+
+  /* -------------------------------------------------------
+     Hover polish (glow only on interaction, small + clean)
+     ------------------------------------------------------- */
+  .glass-hover {
+    transition:
+      transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+      filter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+  }
+
+  .glass-hover:hover {
+    transform: translateY(-1px);
+    border-color: var(--line-strong);
+    box-shadow:
+      var(--shadow-lg),
+      0 0 0 1px rgba(255,255,255,0.58) inset,
+      0 18px 60px rgba(79,70,229,0.10);
+  }
+
+  /* -------------------------------------------------------
+     Pills (calm)
+     ------------------------------------------------------- */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border-radius: 9999px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.52);
+    padding: 0.30rem 0.60rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--muted-strong);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* Optional: “hero” focus card */
+  .glass-hero {
+    border-color: rgba(79,70,229,0.18);
+    box-shadow:
+      var(--shadow-md),
+      0 0 0 1px rgba(255,255,255,0.60) inset,
+      0 22px 70px rgba(79,70,229,0.12);
+  }
+
+  /* -------------------------------------------------------
+     Mask utilities (fix vendorPrefix warning)
+     ------------------------------------------------------- */
+  .mask-fade-bottom {
+    -webkit-mask: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 100%);
+    mask: linear-gradient(180deg, rgba(0,0,0,1) 0%, rgba(0,0,0,1) 78%, rgba(0,0,0,0) 100%);
   }
 }
 
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .animate-\[authIn_\.55s_ease-out_both\] {
-    animation: none !important;
+  .glass-hover {
+    transition: none !important;
   }
 }
-
-/* Optional: smoother focus appearance without changing Tailwind defaults */
-:focus-visible {
-  outline: none;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-120%); }
-  100% { transform: translateX(120%); }
-}
-
